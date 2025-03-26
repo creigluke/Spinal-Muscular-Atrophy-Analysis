@@ -1,0 +1,412 @@
+---
+title: "SMAProject"
+author: "Creig"
+date: "2024-11-15"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup}
+
+library(readr)
+library(readxl)
+
+library(tidyverse)
+library(ggplot2)
+
+library(class)
+
+
+#For Random Forest Algorithm
+library(randomForest)
+
+
+#For Support Vector Machine
+library(e1071)
+
+```
+
+
+
+
+
+```{r}
+
+smadf<-read_excel("D:\\Minor Project\\Data\\SMARecoded.xlsx")
+
+head(smadf)
+
+```
+
+
+
+```{r}
+
+
+attach(smadf)
+
+smadata<-data.frame(Diagnosisage, RGender, RDiagnosticTest, RGeneticStudy, RMutationType, RSMN2Copies, RGastrostomy, RTracheostomy, RLocomotion, SMAtype)
+
+head(smadata)
+
+```
+
+
+```{r}
+#library(DescTools)
+library(psych)
+
+describe(smadata)
+```
+
+
+```{r}
+describe.by(smadata, group = SMAtype)
+```
+
+```{r}
+
+library(ggplot2)
+
+ggplot(data=smadata, aes(SMN2copies))+geom_bar(fill="blue")
+
+```
+
+
+```{r}
+
+library(ggplot2)
+
+ggplot(data=smadata, aes(SMN2copies))+geom_bar(fill="blue")+facet_wrap(.~SMAtype)
+
+```
+
+
+```{r}
+
+library(ggplot2)
+
+plot.new()
+#legend("topright",legend=c("Type 1","Type 2", "Type 3", "Type 4"),col=c("red","black","blue","green"),lty=c(1,1))
+ggplot(data=smadata, aes(Mutationtype))+geom_bar()+facet_wrap(.~SMAtype)
+
+
+
+
+
+```
+
+
+
+```{r}
+
+smadata$SMAtype<-as.factor(smadata$SMAtype)
+```
+
+
+
+
+
+```{r}
+set.seed(385)
+
+smashuf <- smadata[sample(nrow(smadata)),]
+
+# Normalize the features (optional but recommended for KNN)
+normalize <- function(x) {
+    return ((x - min(x)) / (max(x) - min(x)))
+}
+
+sma_norm <- as.data.frame(lapply(smadata[1:9], normalize))
+sma_norm$SMAtype <- smadata$SMAtype
+
+
+
+```
+
+
+```{r}
+
+# Split the data into training and test sets (70% train, 30% test)
+train_index <- 1:161  # First 161 rows as training data
+
+sma_train <- sma_norm[train_index, ]
+sma_test <- sma_norm[-train_index, ]
+
+
+train_labels <- smadata[train_index, 10]
+test_labels <- smadata[-train_index, 10]
+```
+
+
+
+```{r}
+
+# Set the value of k
+k <- 5
+
+# Train the KNN model and make predictions
+knn_predictions <- knn(train = sma_train[, -10], test = sma_test[, -10], cl = train_labels, k = k)
+
+# View the predictions
+print(knn_predictions)
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+
+# Create a confusion matrix
+confusion_matrix <- table(knn_predictions, test_labels)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", accuracy))
+```
+
+
+
+Random Forest Regression
+
+
+
+```{r}
+set.seed(405)
+
+rf_model <- randomForest(SMAtype ~ Diagnosisage+RDiagnosticTest+RGeneticStudy+RMutationType+RSMN2Copies+RGastrostomy+RTracheostomy+RLocomotion, data = smadata, ntree = 100)
+
+
+rf_model
+
+```
+
+
+
+```{r}
+# Split the data into training and test sets
+set.seed(123)
+train_index <- 1:161 # 80% for training
+train_data <- smadata[train_index, ]
+test_data <- smadata[-train_index, ]
+```
+
+
+```{r}
+# Predict the test data
+rf_predictions <- predict(rf_model, test_data)
+```
+
+```{r}
+# Create a confusion matrix
+confusion_matrix <- table(Predicted = rf_predictions, Actual = test_data$SMAtype)
+print(confusion_matrix)
+```
+
+```{r}
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy: ", round(accuracy, 4)))
+```
+
+```{r}
+# Get the OOB error estimate
+oob_error <- rf_model$err.rate[nrow(rf_model$err.rate), "OOB"]
+print(paste("OOB Error Rate: ", round(oob_error, 4)))
+```
+
+
+```{r}
+# Importance of each feature
+importance(rf_model)
+```
+
+```{r}
+# Plot importance
+varImpPlot(rf_model)
+```
+
+
+
+
+Support Vector Machine
+
+```{r}
+
+# Fit the SVM model
+svm_model <- svm(SMAtype ~ Diagnosisage+RDiagnosticTest+RGeneticStudy+RMutationType+RSMN2Copies+RGastrostomy+RTracheostomy+RLocomotion, 
+                 data = smadata, 
+                 kernel = "linear",  # Using a linear kernel
+                 cost = 1,           # Regularization parameter
+                 scale = TRUE)       # Scale the features
+
+
+summary(svm_model)
+
+```
+
+
+```{r}
+# Predict the species
+pred <- predict(svm_model, smadata)
+
+# Display the first few predictions
+head(pred)
+
+```
+
+
+```{r}
+# Confusion matrix to evaluate model accuracy
+conf_matrix <- table(pred, smadata$SMAtype)
+print(conf_matrix)
+
+# Calculate accuracy
+accuracy <- sum(pred == smadata$SMAtype) / length(smadata$SMAtype)
+print(paste("Accuracy: ", round(accuracy * 100, 2), "%"))
+
+```
+
+
+
+```{r}
+# Reduce the iris dataset to two features for visualization
+sma_2d <- smadata[, c("RLocomotion","RSMN2Copies","Diagnosisage","SMAtype")]
+
+# Fit the SVM model on two features
+svm_model_2d <- svm(SMAtype ~ RLocomotion + Diagnosisage, data=smadata, kernel = "linear")
+
+# Create a grid of values to plot the decision boundaries
+x_range <- seq(min(sma_2d$RLocomotion - 1), max(sma_2d$RLocomotion + 1), length.out = 100)
+y_range <- seq(min(sma_2d$Diagnosisage - 1), max(sma_2d$Diagnosisage + 1), length.out = 100)
+grid <- expand.grid(RLocomotion = x_range, Diagnosisage = y_range)
+
+# Predict class for each point in the grid
+grid$pred <- predict(svm_model_2d, grid)
+
+# Step 4: Visualize the decision boundaries
+ggplot(data=sma_2d, aes(x = RLocomotion, y = Diagnosisage )) +
+  geom_point(aes(colour = SMAtype), size = 3) +  
+  geom_tile(data = grid, aes(x = RLocomotion, y = Diagnosisage, fill = pred), alpha = 0.3) +  
+  scale_color_manual(values = c("Type 1" = "red", "Type 2" = "blue", "Type 3" = "green", "Type 4" = "yellow")) +
+  scale_fill_manual(values = c("Type 1" = "red", "Type 2" = "blue", "Type 3" = "green", "Type 4" = "yellow")) +
+  theme_minimal() +
+  labs(title = "SVM Decision Boundaries", x = "Feature 1 (Locomotion)", y = "Feature 2 (Age)")
+```
+
+
+```{r}
+library(scatterplot3d)
+
+# Static 3D scatter plot with color-coded categories
+scatterplot3d(
+  smadata$RMutationType, smadata$RSMN2Copies, smadata$RLocomotion, 
+  color = as.numeric(smadata$SMAtype),
+  pch = 19,
+  main = "Static 3D SVM Visualization",
+  xlab = "Feature 1 (Mutation Type)",
+  ylab = "Feature 2 (SMN2 Copies)",
+  zlab = "Feature 3 (Locomotion)"
+)
+
+```
+
+
+
+
+
+```{r}
+library(xgboost)
+
+xgdata<-smadata
+
+xgdata$SMAtype <- as.numeric(xgdata$SMAtype) - 1  # Convert labels to numeric (0, 1, 2)
+
+
+xgtrain_index <- sample(1:nrow(smadata), 0.7 * nrow(smadata))
+
+xgtrain_data <- xgdata[xgtrain_index, ]
+xgtest_data <- xgdata[-xgtrain_index, ]
+
+```
+
+
+```{r}
+#set.seed(267)
+
+# Create matrices for XGBoost
+dtrain <- xgb.DMatrix(data = as.matrix(xgtrain_data[, -10]), label = xgtrain_data$SMAtype)
+dtest <- xgb.DMatrix(data = as.matrix(xgtest_data[, -10]), label = xgtest_data$SMAtype)
+
+```
+
+
+```{r}
+# Train an XGBoost model
+xgb_model <- xgboost(
+  data = dtrain,
+  max_depth = 4,
+  eta = 0.1,                 # Learning rate
+  nrounds = 100,             # Number of trees
+  objective = "multi:softprob", # Multi-class classification
+  num_class = 4,             # Number of classes
+  verbose = 0
+)
+```
+
+```{r}
+xgb_model
+```
+
+```{r}
+summary(xgb_model)
+
+```
+
+
+```{r}
+
+set.seed(3215)
+# Predict on test data
+pred_probs <- predict(xgb_model, newdata = dtest)
+
+pred_probs
+
+```
+
+
+```{r}
+predictions <- max.col(matrix(pred_probs, ncol = 4, byrow = TRUE)) - 1
+
+predictions
+```
+
+
+
+```{r}
+# Evaluate accuracy
+accuracy <- mean(predictions == xgtest_data$SMAtype)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+
+```
+
+
+
+```{r}
+# Get feature importance
+importance <- xgb.importance(model = xgb_model)
+
+# Plot feature importance
+xgb.plot.importance(importance)
+
+```
+
+
+
